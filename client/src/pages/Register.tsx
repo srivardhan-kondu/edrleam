@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { GraduationCap, Check, X, Eye, EyeOff } from "lucide-react";
 
@@ -9,6 +9,11 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Wake up Render server while user fills the form
+  useEffect(() => {
+    fetch("/api/health").catch(() => {});
+  }, []);
 
   const checks = {
     length: form.password.length >= 8,

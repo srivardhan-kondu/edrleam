@@ -69,7 +69,12 @@ app.use((req, res, next) => {
 });
 
 // ─── SECURITY: CORS — locked to exact domains only ───
-const defaultOrigins = ["http://localhost:5173", "http://localhost:3000", "http://localhost:5001"];
+const defaultOrigins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:5001",
+  "https://edrleam-operations.vercel.app",
+];
 const envOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
