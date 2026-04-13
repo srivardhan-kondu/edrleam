@@ -79,8 +79,14 @@ const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow same-origin requests (no origin header) — server-to-server, Postman, etc.
-      if (!origin) return callback(null, true);
+      // In production, block requests with no origin (prevents sandboxed iframe attacks)
+      // In development, allow for Postman/curl/server-to-server
+      if (!origin) {
+        if (process.env.NODE_ENV === "production") {
+          return callback(new Error("Origin header required"));
+        }
+        return callback(null, true);
+      }
       // Check exact match against whitelist
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);

@@ -10,7 +10,7 @@ const router = Router();
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION = 15 * 60 * 1000; // 15 minutes
-const TOKEN_EXPIRY = "24h"; // Reduced from 7d for security
+const TOKEN_EXPIRY = "4h"; // Short-lived tokens for security
 
 function validatePasswordStrength(password) {
   if (!password || password.length < 8) return "Password must be at least 8 characters";

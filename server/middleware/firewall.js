@@ -7,6 +7,7 @@
 const MALICIOUS_PATTERNS = [
   /\$(?:gt|gte|lt|lte|ne|nin|in|exists|regex|where|elemMatch|size|all|type)\b/i,
   /\{\s*"\$(?:gt|gte|lt|lte|ne|nin|in|exists|regex|where)"/i,
+  /(?:%24|\\u0024)(?:gt|gte|lt|lte|ne|nin|in|exists|regex|where)/i,  // Unicode/URL-encoded $ bypass
   /<\s*script[\s>]/i,
   /javascript\s*:/i,
   /on(?:error|load|click|mouseover|focus|blur)\s*=/i,

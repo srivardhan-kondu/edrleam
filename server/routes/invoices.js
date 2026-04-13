@@ -14,8 +14,8 @@ const router = Router();
  * Mask PAN number for non-essential display: ABCDE1234F → A****234F
  */
 function maskPAN(pan) {
-  if (!pan || pan.length < 10) return "****";
-  return pan[0] + "****" + pan.substring(5);
+  if (!pan || pan.length < 10) return "**********";
+  return "*****" + pan.substring(7); // Only show last 3 chars: *******34F
 }
 
 // GET invoices (trainer: own invoices, admin: all invoices)
@@ -116,15 +116,7 @@ router.post("/", authenticate, async (req, res) => {
       return res.status(400).json({ error: "No. of days and cost per day are required" });
     }
 
-    // Cross-validate against assignment — prevent inflated invoices
-    // Validate TOTAL amount (not individual fields) to prevent combined-field fraud
-    const assignmentTotal = assignment.noOfDays * assignment.perDayCost;
-    const invoiceTotal = parsedDays * parsedPerDay;
-    const maxTotal = Math.ceil(assignmentTotal * 1.05); // 5% tolerance only
-    if (invoiceTotal > maxTotal) {
-      return res.status(400).json({ error: `Invoice total (₹${invoiceTotal}) exceeds assignment total (₹${assignmentTotal})` });
-    }
-    // Also cap individual fields at assignment values (no single-field inflation)
+    // Cross-validate against assignment — ZERO tolerance for inflation
     if (parsedDays > assignment.noOfDays) {
       return res.status(400).json({ error: `Days cannot exceed assignment days (${assignment.noOfDays})` });
     }
@@ -148,20 +140,29 @@ router.post("/", authenticate, async (req, res) => {
     const trainerCost = parsedDays * parsedPerDay;
     const totalAmount = trainerCost + parsedTravel + parsedOther;
 
-    const invoice = await Invoice.create({
-      assignmentId,
-      projectId: assignment.projectId?._id,
-      trainerId: req.user.id,
-      noOfDays: parsedDays,
-      perDayCost: parsedPerDay,
-      trainerCost,
-      panNumber: normalizedPan,
-      travelToFroCost: parsedTravel,
-      otherExpenses: parsedOther,
-      totalAmount,
-      status: "raised",
-      raisedAt: new Date(),
-    });
+    let invoice;
+    try {
+      invoice = await Invoice.create({
+        assignmentId,
+        projectId: assignment.projectId?._id,
+        trainerId: req.user.id,
+        noOfDays: parsedDays,
+        perDayCost: parsedPerDay,
+        trainerCost,
+        panNumber: normalizedPan,
+        travelToFroCost: parsedTravel,
+        otherExpenses: parsedOther,
+        totalAmount,
+        status: "raised",
+        raisedAt: new Date(),
+      });
+    } catch (createErr) {
+      // Handle race condition: unique index on assignmentId prevents duplicates at DB level
+      if (createErr.code === 11000) {
+        return res.status(409).json({ error: "Invoice already raised for this assignment" });
+      }
+      throw createErr;
+    }
 
     const admins = await User.find({ role: "admin" }).select("_id");
     if (admins.length > 0) {

@@ -21,7 +21,8 @@ export function validateIdParam(req, res, next) {
  * Validate email format
  */
 export function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+  // RFC 5322 simplified — requires valid local part, domain, and TLD (2+ chars)
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(email) && email.length <= 254;
 }
 
 /**
@@ -56,7 +57,12 @@ export function sanitizeString(str) {
  * Safe error response — never leak internal details
  */
 export function safeError(res, error, statusCode = 500) {
-  console.error("Server error:", error);
+  // In production only log error message, never full stack/object
+  if (process.env.NODE_ENV === "production") {
+    console.error("Server error:", error?.message || "Unknown error");
+  } else {
+    console.error("Server error:", error);
+  }
   if (statusCode === 500) {
     return res.status(500).json({ error: "Internal server error" });
   }
