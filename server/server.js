@@ -1,0 +1,44 @@
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import path from "path";
+import { fileURLToPath } from "url";
+
+import authRoutes from "./routes/auth.js";
+import projectRoutes from "./routes/projects.js";
+import assignmentRoutes from "./routes/assignments.js";
+import trainerRoutes from "./routes/trainers.js";
+import collegeRoutes from "./routes/colleges.js";
+import dashboardRoutes from "./routes/dashboard.js";
+import notificationRoutes from "./routes/notifications.js";
+import invoiceRoutes from "./routes/invoices.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors({ origin: ["http://localhost:5173", "http://localhost:3000", "http://localhost:5001"], credentials: true }));
+app.use(express.json());
+
+// Serve static files (uploads)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/assignments", assignmentRoutes);
+app.use("/api/trainers", trainerRoutes);
+app.use("/api/colleges", collegeRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/invoices", invoiceRoutes);
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
