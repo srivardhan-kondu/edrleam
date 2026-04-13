@@ -22,6 +22,15 @@ import invoiceRoutes from "./routes/invoices.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ─── SECURITY: Validate required environment variables on startup ───
+const REQUIRED_ENV = ["MONGODB_URI", "JWT_SECRET"];
+for (const envVar of REQUIRED_ENV) {
+  if (!process.env[envVar]) {
+    console.error(`FATAL: Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -148,7 +157,9 @@ app.use((req, res) => {
 
 // ─── SECURITY: Global error handler — never leak stack traces ───
 app.use((err, req, res, _next) => {
-  console.error("Unhandled error:", err.message);
+  if (process.env.NODE_ENV !== "production") {
+    console.error("Unhandled error:", err.message);
+  }
   res.status(500).json({ error: "Internal server error" });
 });
 

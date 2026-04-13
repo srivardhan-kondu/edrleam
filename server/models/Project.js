@@ -30,4 +30,7 @@ const ProjectSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+ProjectSchema.index({ collegeName: 1 });
+ProjectSchema.index({ status: 1 });
+
 export default mongoose.models.Project || mongoose.model("Project", ProjectSchema);

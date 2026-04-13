@@ -38,4 +38,9 @@ const InvoiceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+InvoiceSchema.index({ trainerId: 1 });
+InvoiceSchema.index({ status: 1 });
+InvoiceSchema.index({ projectId: 1 });
+InvoiceSchema.index({ assignmentId: 1 }, { unique: true });
+
 export default mongoose.models.Invoice || mongoose.model("Invoice", InvoiceSchema);

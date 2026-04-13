@@ -18,4 +18,8 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+UserSchema.index({ email: 1 }, { unique: true });
+UserSchema.index({ role: 1 });
+UserSchema.index({ status: 1 });
+
 export default mongoose.models.User || mongoose.model("User", UserSchema);

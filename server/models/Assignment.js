@@ -25,4 +25,9 @@ const AssignmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+AssignmentSchema.index({ trainerId: 1 });
+AssignmentSchema.index({ projectId: 1 });
+AssignmentSchema.index({ status: 1 });
+AssignmentSchema.index({ projectId: 1, trainerId: 1 }, { unique: true });
+
 export default mongoose.models.Assignment || mongoose.model("Assignment", AssignmentSchema);

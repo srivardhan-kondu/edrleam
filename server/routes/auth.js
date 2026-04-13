@@ -39,7 +39,11 @@ router.post("/login", async (req, res) => {
     }
 
     const user = await User.findOne({ email: cleanEmail });
+
+    // Constant-time comparison: always run bcrypt to prevent timing-based user enumeration
+    const dummyHash = "$2a$12$0000000000000000000000uGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG";
     if (!user) {
+      await bcrypt.compare(password, dummyHash);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 

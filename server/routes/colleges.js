@@ -245,8 +245,8 @@ router.get("/trainer/overview/:name", authenticate, async (req, res) => {
 router.get("/", authenticate, adminOnly, async (req, res) => {
   try {
     await dbConnect();
-    const projects = await Project.find().sort({ createdAt: -1 });
-    const assignments = await Assignment.find({ status: { $ne: "rejected" } });
+    const projects = await Project.find().sort({ createdAt: -1 }).limit(10000).lean();
+    const assignments = await Assignment.find({ status: { $ne: "rejected" } }).limit(50000).lean();
 
     const collegeMap = {};
 
@@ -321,7 +321,7 @@ router.get("/:name", authenticate, adminOnly, async (req, res) => {
       return res.status(400).json({ error: "Invalid college name" });
     }
 
-    const projects = await Project.find({ collegeName }).sort({ startDate: -1 });
+    const projects = await Project.find({ collegeName }).sort({ startDate: -1 }).limit(1000).lean();
     if (projects.length === 0) {
       return res.status(404).json({ error: "College not found" });
     }

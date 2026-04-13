@@ -22,7 +22,7 @@ async function seed() {
     status: "approved",
   });
 
-  console.log("Admin created. Email: admin@gmail.com, Password: Admin@123");
+  console.log("Admin account created successfully. Use the configured admin credentials to log in.");
   process.exit(0);
 }
 

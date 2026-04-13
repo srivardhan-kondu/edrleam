@@ -14,6 +14,7 @@ const router = Router();
 // Valid state transitions for assignments
 const VALID_TRANSITIONS = {
   assigned: ["accepted", "rejected"],
+  pending: ["accepted", "rejected"],
   accepted: ["completed"],
   // rejected and completed are terminal states
 };
@@ -30,8 +31,17 @@ router.post("/", authenticate, adminOnly, upload.single("toc"), async (req, res)
       return res.status(400).json({ error: "Valid project and trainer IDs are required" });
     }
 
-    const parsedNoOfDays = Number(noOfDays) || 0;
-    const parsedPerDayCost = Number(perDayCost) || 0;
+    // Validate numeric inputs — reject non-numeric values instead of silently coercing
+    if (noOfDays == null || noOfDays === "" || isNaN(Number(noOfDays))) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "noOfDays must be a valid number" });
+    }
+    if (perDayCost == null || perDayCost === "" || isNaN(Number(perDayCost))) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "perDayCost must be a valid number" });
+    }
+    const parsedNoOfDays = Number(noOfDays);
+    const parsedPerDayCost = Number(perDayCost);
     const computedCost = parsedNoOfDays * parsedPerDayCost;
     const parsedTrainerCost = Number(trainerCost) || 0;
     const finalTrainerCost = computedCost > 0 ? computedCost : parsedTrainerCost;

@@ -15,8 +15,8 @@ router.get("/", authenticate, adminOnly, async (req, res) => {
 
     const period = VALID_PERIODS.includes(req.query.period) ? req.query.period : "all";
 
-    const projects = await Project.find();
-    const assignments = await Assignment.find({ status: { $ne: "rejected" } });
+    const projects = await Project.find().limit(10000).lean();
+    const assignments = await Assignment.find({ status: { $ne: "rejected" } }).limit(50000).lean();
 
     const now = new Date();
     const filteredProjects = projects.filter((p) => {

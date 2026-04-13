@@ -99,8 +99,15 @@ router.post("/", authenticate, async (req, res) => {
       return res.status(400).json({ error: "Invoice already raised for this assignment" });
     }
 
-    const parsedDays = Number(noOfDays) || 0;
-    const parsedPerDay = Number(perDayCost) || 0;
+    // Validate numeric inputs — reject non-numeric values instead of silently coercing
+    if (noOfDays == null || noOfDays === "" || isNaN(Number(noOfDays))) {
+      return res.status(400).json({ error: "noOfDays must be a valid number" });
+    }
+    if (perDayCost == null || perDayCost === "" || isNaN(Number(perDayCost))) {
+      return res.status(400).json({ error: "perDayCost must be a valid number" });
+    }
+    const parsedDays = Number(noOfDays);
+    const parsedPerDay = Number(perDayCost);
     const parsedTravel = Number(travelToFroCost) || 0;
     const parsedOther = Number(otherExpenses) || 0;
     const normalizedPan = String(panNumber || "").trim().toUpperCase();
@@ -110,13 +117,18 @@ router.post("/", authenticate, async (req, res) => {
     }
 
     // Cross-validate against assignment — prevent inflated invoices
-    // Allow up to 10% tolerance for rounding but not more
-    const maxDays = Math.ceil(assignment.noOfDays * 1.1);
-    const maxPerDay = Math.ceil(assignment.perDayCost * 1.1);
-    if (parsedDays > maxDays) {
+    // Validate TOTAL amount (not individual fields) to prevent combined-field fraud
+    const assignmentTotal = assignment.noOfDays * assignment.perDayCost;
+    const invoiceTotal = parsedDays * parsedPerDay;
+    const maxTotal = Math.ceil(assignmentTotal * 1.05); // 5% tolerance only
+    if (invoiceTotal > maxTotal) {
+      return res.status(400).json({ error: `Invoice total (₹${invoiceTotal}) exceeds assignment total (₹${assignmentTotal})` });
+    }
+    // Also cap individual fields at assignment values (no single-field inflation)
+    if (parsedDays > assignment.noOfDays) {
       return res.status(400).json({ error: `Days cannot exceed assignment days (${assignment.noOfDays})` });
     }
-    if (parsedPerDay > maxPerDay) {
+    if (parsedPerDay > assignment.perDayCost) {
       return res.status(400).json({ error: `Per-day cost cannot exceed assignment rate (₹${assignment.perDayCost})` });
     }
 
