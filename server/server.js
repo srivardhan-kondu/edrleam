@@ -3,8 +3,6 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import mongoSanitize from "express-mongo-sanitize";
-import hpp from "hpp";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -114,13 +112,8 @@ app.use(
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: false, limit: "10kb" }));
 
-// ─── SECURITY: MongoDB operator injection prevention ───
-app.use(mongoSanitize({ replaceWith: "_" }));
-
-// ─── SECURITY: HTTP parameter pollution protection ───
-app.use(hpp());
-
 // ─── SECURITY: Application firewall (XSS, injection, traversal) ───
+// Note: MongoDB operator injection is handled by the firewall (blocks $gt, $ne, etc.)
 app.use(firewall);
 
 // ─── SECURITY: Global rate limiter — 100 requests per 15 min per IP ───
