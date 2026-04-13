@@ -4,7 +4,9 @@ import App from "./App";
 import { AuthProvider } from "./context/AuthContext";
 import "./index.css";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const envApiBase = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const isVercelHost = typeof window !== "undefined" && window.location.hostname.endsWith(".vercel.app");
+const API_BASE = (envApiBase || (isVercelHost ? "https://edrleam.onrender.com" : "")).replace(/\/$/, "");
 
 if (API_BASE) {
   const nativeFetch = window.fetch.bind(window);

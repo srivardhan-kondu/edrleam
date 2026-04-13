@@ -29,7 +29,8 @@ const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const isVercelOrigin = typeof origin === "string" && /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin);
+      if (!origin || allowedOrigins.includes(origin) || isVercelOrigin) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
