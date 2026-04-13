@@ -3,14 +3,17 @@ import dbConnect from "../db.js";
 import Project from "../models/Project.js";
 import Assignment from "../models/Assignment.js";
 import { authenticate, adminOnly } from "../middleware/auth.js";
+import { safeError } from "../middleware/validate.js";
 
 const router = Router();
+
+const VALID_PERIODS = ["all", "week", "month", "year"];
 
 router.get("/", authenticate, adminOnly, async (req, res) => {
   try {
     await dbConnect();
 
-    const period = req.query.period || "all";
+    const period = VALID_PERIODS.includes(req.query.period) ? req.query.period : "all";
 
     const projects = await Project.find();
     const assignments = await Assignment.find({ status: { $ne: "rejected" } });
@@ -115,7 +118,7 @@ router.get("/", authenticate, adminOnly, async (req, res) => {
       period,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 

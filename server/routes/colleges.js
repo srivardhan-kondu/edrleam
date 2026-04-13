@@ -4,11 +4,12 @@ import Project from "../models/Project.js";
 import Assignment from "../models/Assignment.js";
 import Invoice from "../models/Invoice.js";
 import { authenticate, adminOnly } from "../middleware/auth.js";
+import { sanitizeString, safeError } from "../middleware/validate.js";
 
 const router = Router();
 
 const normalizeCollegeKey = (value = "") =>
-  String(value)
+  sanitizeString(String(value))
     .replace(/\bphase\s*[-_]*\s*0*\d+\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim()
@@ -129,7 +130,7 @@ router.get("/trainer/overview", authenticate, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -142,7 +143,7 @@ router.get("/trainer/overview/:name", authenticate, async (req, res) => {
       return res.status(403).json({ error: "Trainer access only" });
     }
 
-    const requestedCollegeName = decodeURIComponent(req.params.name);
+    const requestedCollegeName = sanitizeString(decodeURIComponent(req.params.name)).substring(0, 200);
     const requestedCollegeKey = normalizeCollegeKey(requestedCollegeName);
     const assignments = await Assignment.find({ trainerId: req.user.id })
       .populate("projectId", "name collegeName description startDate endDate status skillsRequired contactPerson contactEmail contactPhone")
@@ -236,7 +237,7 @@ router.get("/trainer/overview/:name", authenticate, async (req, res) => {
       projects,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -306,7 +307,7 @@ router.get("/", authenticate, adminOnly, async (req, res) => {
       }))
     );
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -314,7 +315,11 @@ router.get("/", authenticate, adminOnly, async (req, res) => {
 router.get("/:name", authenticate, adminOnly, async (req, res) => {
   try {
     await dbConnect();
-    const collegeName = decodeURIComponent(req.params.name);
+    const collegeName = sanitizeString(decodeURIComponent(req.params.name)).substring(0, 200);
+    // Validate: reject if it's empty or looks like MongoDB operator
+    if (!collegeName || collegeName.startsWith("$")) {
+      return res.status(400).json({ error: "Invalid college name" });
+    }
 
     const projects = await Project.find({ collegeName }).sort({ startDate: -1 });
     if (projects.length === 0) {
@@ -556,7 +561,7 @@ router.get("/:name", authenticate, adminOnly, async (req, res) => {
       generatedAt: new Date(),
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 

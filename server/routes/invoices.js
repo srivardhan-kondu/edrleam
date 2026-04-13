@@ -6,10 +6,17 @@ import Project from "../models/Project.js";
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { authenticate, adminOnly } from "../middleware/auth.js";
+import { validateIdParam, isValidObjectId, isValidPAN, sanitizeString, safeError } from "../middleware/validate.js";
 
 const router = Router();
 
-const normalizePan = (value = "") => String(value).trim().toUpperCase();
+/**
+ * Mask PAN number for non-essential display: ABCDE1234F → A****234F
+ */
+function maskPAN(pan) {
+  if (!pan || pan.length < 10) return "****";
+  return pan[0] + "****" + pan.substring(5);
+}
 
 // GET invoices (trainer: own invoices, admin: all invoices)
 router.get("/", authenticate, async (req, res) => {
@@ -32,9 +39,18 @@ router.get("/", authenticate, async (req, res) => {
       .populate("assignmentId", "status completedAt")
       .sort({ createdAt: -1 });
 
-    res.json(invoices);
+    // Mask PAN numbers in response — only show full PAN to the trainer who owns it
+    const safeInvoices = invoices.map((inv) => {
+      const obj = inv.toObject();
+      if (role === "admin") {
+        obj.panNumber = maskPAN(obj.panNumber);
+      }
+      return obj;
+    });
+
+    res.json(safeInvoices);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -56,8 +72,8 @@ router.post("/", authenticate, async (req, res) => {
       otherExpenses,
     } = req.body;
 
-    if (!assignmentId) {
-      return res.status(400).json({ error: "Assignment is required" });
+    if (!assignmentId || !isValidObjectId(assignmentId)) {
+      return res.status(400).json({ error: "Valid assignment ID is required" });
     }
 
     const assignment = await Assignment.findById(assignmentId).populate(
@@ -69,7 +85,7 @@ router.post("/", authenticate, async (req, res) => {
     }
 
     if (assignment.trainerId.toString() !== req.user.id) {
-      return res.status(401).json({ error: "Unauthorized" });
+      return res.status(403).json({ error: "Access denied" });
     }
 
     if (assignment.status !== "completed" || !assignment.completedAt) {
@@ -87,16 +103,34 @@ router.post("/", authenticate, async (req, res) => {
     const parsedPerDay = Number(perDayCost) || 0;
     const parsedTravel = Number(travelToFroCost) || 0;
     const parsedOther = Number(otherExpenses) || 0;
-    const normalizedPan = normalizePan(panNumber);
+    const normalizedPan = String(panNumber || "").trim().toUpperCase();
 
     if (parsedDays <= 0 || parsedPerDay <= 0) {
       return res.status(400).json({ error: "No. of days and cost per day are required" });
     }
-    if (!normalizedPan) {
-      return res.status(400).json({ error: "PAN number is required" });
+
+    // Cross-validate against assignment — prevent inflated invoices
+    // Allow up to 10% tolerance for rounding but not more
+    const maxDays = Math.ceil(assignment.noOfDays * 1.1);
+    const maxPerDay = Math.ceil(assignment.perDayCost * 1.1);
+    if (parsedDays > maxDays) {
+      return res.status(400).json({ error: `Days cannot exceed assignment days (${assignment.noOfDays})` });
     }
+    if (parsedPerDay > maxPerDay) {
+      return res.status(400).json({ error: `Per-day cost cannot exceed assignment rate (₹${assignment.perDayCost})` });
+    }
+
+    // Validate PAN format
+    if (!isValidPAN(normalizedPan)) {
+      return res.status(400).json({ error: "Invalid PAN number format (expected: ABCDE1234F)" });
+    }
+
     if (parsedTravel < 0 || parsedOther < 0) {
       return res.status(400).json({ error: "Expenses cannot be negative" });
+    }
+    // Cap expenses to reasonable amounts
+    if (parsedTravel > 1000000 || parsedOther > 1000000) {
+      return res.status(400).json({ error: "Expense amounts exceed maximum limit" });
     }
 
     const trainerCost = parsedDays * parsedPerDay;
@@ -123,7 +157,7 @@ router.post("/", authenticate, async (req, res) => {
         admins.map((admin) => ({
           userId: admin._id,
           title: "Invoice Raised",
-          message: `A trainer raised an invoice for ${assignment.projectId?.name || "a project"}.`,
+          message: `A trainer raised an invoice for ${sanitizeString(assignment.projectId?.name || "a project")}.`,
           type: "financial",
           link: "/admin/invoices",
         }))
@@ -137,12 +171,12 @@ router.post("/", authenticate, async (req, res) => {
 
     res.status(201).json(saved);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
 // PUT update invoice status (admin only): raised -> approved -> cleared
-router.put("/:id/status", authenticate, adminOnly, async (req, res) => {
+router.put("/:id/status", authenticate, adminOnly, validateIdParam, async (req, res) => {
   try {
     await dbConnect();
     const { status, adminRemarks } = req.body;
@@ -166,7 +200,7 @@ router.put("/:id/status", authenticate, adminOnly, async (req, res) => {
     }
 
     invoice.status = status;
-    invoice.adminRemarks = typeof adminRemarks === "string" ? adminRemarks.trim() : invoice.adminRemarks;
+    invoice.adminRemarks = typeof adminRemarks === "string" ? sanitizeString(adminRemarks).substring(0, 500) : invoice.adminRemarks;
     if (status === "approved") {
       invoice.approvedAt = new Date();
     }
@@ -180,8 +214,8 @@ router.put("/:id/status", authenticate, adminOnly, async (req, res) => {
       title: status === "approved" ? "Invoice Approved" : "Invoice Cleared",
       message:
         status === "approved"
-          ? `Your invoice for ${invoice.projectId?.name || "project"} was approved by admin.`
-          : `Your invoice for ${invoice.projectId?.name || "project"} was cleared by admin.`,
+          ? `Your invoice for ${sanitizeString(invoice.projectId?.name || "project")} was approved by admin.`
+          : `Your invoice for ${sanitizeString(invoice.projectId?.name || "project")} was cleared by admin.`,
       type: "financial",
       link: "/trainer/invoices",
     });
@@ -191,9 +225,12 @@ router.put("/:id/status", authenticate, adminOnly, async (req, res) => {
       .populate("trainerId", "name email")
       .populate("assignmentId", "status completedAt");
 
-    res.json(saved);
+    // Mask PAN in response
+    const result = saved.toObject();
+    result.panNumber = maskPAN(result.panNumber);
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -230,7 +267,7 @@ router.get("/trainer/eligible", authenticate, async (req, res) => {
 
     res.json(eligible);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 

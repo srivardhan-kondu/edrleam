@@ -2,6 +2,7 @@ import { Router } from "express";
 import dbConnect from "../db.js";
 import Notification from "../models/Notification.js";
 import { authenticate } from "../middleware/auth.js";
+import { safeError } from "../middleware/validate.js";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get("/", authenticate, async (req, res) => {
       .limit(50);
     res.json(notifications);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -25,7 +26,7 @@ router.put("/", authenticate, async (req, res) => {
     await Notification.updateMany({ userId: req.user.id, read: false }, { read: true });
     res.json({ message: "All notifications marked as read" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 

@@ -4,14 +4,17 @@ import jwt from "jsonwebtoken";
 import dbConnect from "../db.js";
 import User from "../models/User.js";
 import { authenticate, adminOnly } from "../middleware/auth.js";
+import { isValidEmail, isValidPhone, sanitizeString, safeError } from "../middleware/validate.js";
 
 const router = Router();
 
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCK_DURATION = 15 * 60 * 1000; // 15 minutes
+const TOKEN_EXPIRY = "24h"; // Reduced from 7d for security
 
 function validatePasswordStrength(password) {
   if (!password || password.length < 8) return "Password must be at least 8 characters";
+  if (password.length > 128) return "Password must be less than 128 characters";
   if (!/[A-Z]/.test(password)) return "Password must include an uppercase letter";
   if (!/[a-z]/.test(password)) return "Password must include a lowercase letter";
   if (!/[0-9]/.test(password)) return "Password must include a number";
@@ -29,7 +32,13 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Email and password are required" });
     }
 
-    const user = await User.findOne({ email });
+    // Validate email format before querying DB
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -84,7 +93,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: user._id.toString(), email: user.email, name: user.name, role: user.role, tokenVersion: user.tokenVersion || 0 },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: TOKEN_EXPIRY }
     );
 
     res.json({
@@ -92,7 +101,7 @@ router.post("/login", async (req, res) => {
       user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -106,6 +115,19 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "Name, email, and password are required" });
     }
 
+    // Validate & sanitize inputs
+    const cleanName = sanitizeString(name).substring(0, 100);
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+    if (phone && !isValidPhone(phone)) {
+      return res.status(400).json({ error: "Invalid phone number format" });
+    }
+    if (cleanName.length < 2) {
+      return res.status(400).json({ error: "Name must be at least 2 characters" });
+    }
+
     if (password !== confirmPassword) {
       return res.status(400).json({ error: "Passwords do not match" });
     }
@@ -115,27 +137,32 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: pwError });
     }
 
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email: cleanEmail });
     if (existing) {
       return res.status(400).json({ error: "Email already registered" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Sanitize array inputs
+    const cleanSkills = Array.isArray(skills)
+      ? skills.map((s) => sanitizeString(String(s)).substring(0, 50)).filter(Boolean).slice(0, 20)
+      : [];
+
     await User.create({
-      name,
-      email,
+      name: cleanName,
+      email: cleanEmail,
       password: hashedPassword,
-      phone: phone || "",
-      skills: skills || [],
-      experience: experience || "",
+      phone: phone ? String(phone).trim().substring(0, 20) : "",
+      skills: cleanSkills,
+      experience: sanitizeString(String(experience || "")).substring(0, 500),
       role: "trainer",
       status: "pending",
     });
 
     res.status(201).json({ message: "Registration successful. Waiting for admin approval." });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
@@ -180,34 +207,29 @@ router.put("/change-password", authenticate, async (req, res) => {
     const token = jwt.sign(
       { id: user._id.toString(), email: user.email, name: user.name, role: user.role, tokenVersion: user.tokenVersion },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: TOKEN_EXPIRY }
     );
 
     res.json({ message: "Password changed successfully", token });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
-// Get current user
+// Get current user (tokenVersion already validated in authenticate middleware)
 router.get("/me", authenticate, async (req, res) => {
   try {
     await dbConnect();
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user.id).select("-password -loginAttempts -lockUntil -tokenVersion");
     if (!user) {
       return res.status(401).json({ error: "User not found" });
-    }
-
-    // Verify token version
-    if ((user.tokenVersion || 0) !== (req.user.tokenVersion || 0)) {
-      return res.status(401).json({ error: "Session expired. Please login again." });
     }
 
     res.json({
       user: { id: user._id.toString(), email: user.email, name: user.name, role: user.role },
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    safeError(res, error);
   }
 });
 
